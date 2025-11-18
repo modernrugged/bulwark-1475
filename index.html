@@ -3,128 +3,129 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Bulwark 1475 - A retro SNES-style castle defense game">
-    <title>Bulwark 1475 - Castle Defense</title>
+    <title>Bulwark 1475 - Medieval Castle Defense</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <div id="game-container">
-        <div id="title-screen">
-            <h1 class="title-logo">
-                <span class="castle-icon">🏰</span>
-                BULWARK 1475
-                <span class="castle-icon">🏰</span>
-            </h1>
-            <p class="subtitle">CASTLE DEFENSE</p>
-            <div class="menu">
-                <button class="menu-btn" id="start-btn">▶ START GAME</button>
-                <button class="menu-btn" id="instructions-btn">📖 INSTRUCTIONS</button>
-            </div>
-            <div class="credits">
-                <p>A RETRO SNES-STYLE GAME</p>
-                <p>© 2025 BULWARK STUDIOS</p>
-            </div>
-        </div>
-
-        <div id="instructions-screen" style="display: none;">
-            <h2>HOW TO PLAY</h2>
-            <div class="instructions-content">
-                <div class="instruction-section">
-                    <h3>OBJECTIVE</h3>
-                    <p>Defend your castle from waves of enemies!</p>
-                    <p>Survive as many waves as possible.</p>
-                </div>
-                <div class="instruction-section">
-                    <h3>CONTROLS</h3>
-                    <p><strong>MOUSE:</strong> Click to place towers</p>
-                    <p><strong>1-4 KEYS:</strong> Select tower type</p>
-                    <p><strong>SPACE:</strong> Start next wave</p>
-                    <p><strong>ESC:</strong> Pause game</p>
-                </div>
-                <div class="instruction-section">
-                    <h3>TOWERS</h3>
-                    <p><strong>[1] ARCHER (50G):</strong> Basic ranged attack</p>
-                    <p><strong>[2] CANNON (100G):</strong> High damage, slow</p>
-                    <p><strong>[3] MAGE (150G):</strong> Area damage</p>
-                    <p><strong>[4] BARRICADE (75G):</strong> Blocks enemies</p>
-                </div>
-                <div class="instruction-section">
-                    <h3>TIPS</h3>
-                    <p>• Earn gold by defeating enemies</p>
-                    <p>• Place towers strategically</p>
-                    <p>• Don't let enemies reach your castle!</p>
-                </div>
-            </div>
-            <button class="menu-btn" id="back-btn">◀ BACK</button>
-        </div>
-
-        <div id="game-screen" style="display: none;">
-            <div id="game-hud">
-                <div class="hud-section">
-                    <span class="hud-label">GOLD:</span>
-                    <span class="hud-value" id="gold">200</span>
-                </div>
-                <div class="hud-section">
-                    <span class="hud-label">WAVE:</span>
-                    <span class="hud-value" id="wave">1</span>
-                </div>
-                <div class="hud-section">
-                    <span class="hud-label">LIVES:</span>
-                    <span class="hud-value" id="lives">❤️❤️❤️❤️❤️</span>
-                </div>
-                <div class="hud-section">
-                    <span class="hud-label">SCORE:</span>
-                    <span class="hud-value" id="score">0</span>
-                </div>
+    <div class="page-wrapper">
+        <!-- Hero Section with Game -->
+        <section class="hero-section">
+            <div class="hero-content">
+                <h1 class="game-logo">BULWARK 1475</h1>
+                <p class="tagline">Build the walls. Place the cannons. Survive the siege.</p>
+                <button class="play-btn" id="playBtn">⚔ PLAY NOW ⚔</button>
             </div>
 
-            <canvas id="gameCanvas" width="800" height="500"></canvas>
+            <div class="game-container">
+                <canvas id="gameCanvas" width="640" height="480"></canvas>
+            </div>
+        </section>
 
-            <div id="tower-menu">
-                <div class="tower-option" data-tower="archer" data-cost="50">
-                    <div class="tower-key">1</div>
-                    <div class="tower-info">
-                        <div class="tower-name">ARCHER</div>
-                        <div class="tower-cost">50G</div>
-                    </div>
-                </div>
-                <div class="tower-option" data-tower="cannon" data-cost="100">
-                    <div class="tower-key">2</div>
-                    <div class="tower-info">
-                        <div class="tower-name">CANNON</div>
-                        <div class="tower-cost">100G</div>
-                    </div>
-                </div>
-                <div class="tower-option" data-tower="mage" data-cost="150">
-                    <div class="tower-key">3</div>
-                    <div class="tower-info">
-                        <div class="tower-name">MAGE</div>
-                        <div class="tower-cost">150G</div>
-                    </div>
-                </div>
-                <div class="tower-option" data-tower="barricade" data-cost="75">
-                    <div class="tower-key">4</div>
-                    <div class="tower-info">
-                        <div class="tower-name">WALL</div>
-                        <div class="tower-cost">75G</div>
-                    </div>
-                </div>
-                <button class="wave-btn" id="next-wave-btn">START WAVE (SPACE)</button>
-            </div>
-        </div>
+        <!-- About Section -->
+        <section class="info-section">
+            <h2>About the Game</h2>
+            <p>
+                Bulwark 1475 is a medieval-themed castle defense game that combines strategy, puzzle-solving,
+                and arcade action. Defend your island fortress from waves of attacking ships and enemy forts
+                across a treacherous river. This SNES-era inspired game features alternating phases of intense
+                cannon battles and strategic wall building.
+            </p>
+        </section>
 
-        <div id="game-over-screen" style="display: none;">
-            <h1 class="game-over-title">GAME OVER</h1>
-            <div class="final-stats">
-                <p>FINAL SCORE: <span id="final-score">0</span></p>
-                <p>WAVES SURVIVED: <span id="final-wave">0</span></p>
-                <p>ENEMIES DEFEATED: <span id="enemies-defeated">0</span></p>
+        <!-- Phases Section -->
+        <section class="info-section">
+            <h2>How It Plays: The Four Phases</h2>
+            <div class="phases-grid">
+                <div class="phase-card">
+                    <h3>🏰 Castle Selection</h3>
+                    <p>At the start of each level, choose your home castle from 5 available fortresses.
+                       It will be instantly surrounded by protective walls.</p>
+                </div>
+                <div class="phase-card">
+                    <h3>🎯 Cannon Placement</h3>
+                    <p>Place your cannons strategically inside your walled castles. Your home castle provides
+                       2 cannons, and each additional enclosed castle provides 1 more.</p>
+                </div>
+                <div class="phase-card">
+                    <h3>⚔ Combat</h3>
+                    <p>Manually aim and fire your cannons at enemy ships and forts. Lead your shots to hit
+                       moving targets while defending against enemy fire that damages your walls.</p>
+                </div>
+                <div class="phase-card">
+                    <h3>🧱 Building</h3>
+                    <p>Repair wall breaches using Tetris-like blocks. Enclose additional castles to gain
+                       more cannons. If no castle is fully enclosed, you lose!</p>
+                </div>
             </div>
-            <div class="menu">
-                <button class="menu-btn" id="restart-btn">↻ PLAY AGAIN</button>
-                <button class="menu-btn" id="menu-btn">◀ MAIN MENU</button>
+        </section>
+
+        <!-- Levels Section -->
+        <section class="info-section">
+            <h2>Levels & Difficulty</h2>
+            <p>
+                Battle through <strong>5 levels</strong>, each with <strong>3 rounds</strong>. Each level
+                features a unique island map with different castle layouts. Difficulty increases with each level:
+            </p>
+            <ul>
+                <li>More and faster enemy ships</li>
+                <li>Stronger enemy cannons dealing more wall damage</li>
+                <li>Longer and more intense combat phases</li>
+                <li>More complex terrain to defend</li>
+            </ul>
+            <p>
+                Survive all 15 rounds to witness the enemy commander's dramatic execution by
+                <strong>walking the plank</strong>!
+            </p>
+        </section>
+
+        <!-- Controls Section -->
+        <section class="info-section">
+            <h2>Controls</h2>
+            <div class="controls-grid">
+                <div class="control-group">
+                    <h3>Mouse</h3>
+                    <ul>
+                        <li>Click to select castle (Castle Selection)</li>
+                        <li>Click to place cannon (Cannon Placement)</li>
+                        <li>Click to fire cannon (Combat)</li>
+                        <li>Click to place wall piece (Building)</li>
+                    </ul>
+                </div>
+                <div class="control-group">
+                    <h3>Keyboard</h3>
+                    <ul>
+                        <li><strong>Q / E:</strong> Switch active cannon (Combat)</li>
+                        <li><strong>Arrow Keys:</strong> Adjust aim / Move piece</li>
+                        <li><strong>Z / X:</strong> Rotate wall piece (Building)</li>
+                        <li><strong>SPACE:</strong> Fire cannon / Place piece</li>
+                        <li><strong>ESC:</strong> Pause game</li>
+                    </ul>
+                </div>
             </div>
-        </div>
+        </section>
+
+        <!-- Legacy Section -->
+        <section class="info-section">
+            <h2>Legacy & Inspiration</h2>
+            <p>
+                Bulwark 1475 captures the spirit of 1990s arcade castle defense games with chunky pixel art,
+                strategic depth, and fast-paced action. Inspired by classic SNES titles, it combines the
+                tactical thinking of tower defense with the quick reflexes of shoot-'em-ups and the
+                puzzle-solving of Tetris. Every round is a battle against time and enemy forces!
+            </p>
+        </section>
+
+        <!-- Credits Section -->
+        <footer class="info-section credits-section">
+            <h2>Credits</h2>
+            <p>
+                <strong>Game Design & Development:</strong> Bulwark Studios<br>
+                <strong>Inspired by:</strong> Classic 16-bit SNES arcade games<br>
+                <strong>Year:</strong> 2025<br>
+                <strong>Theme:</strong> Medieval castle warfare
+            </p>
+            <p class="copyright">© 2025 Bulwark Studios. All rights reserved.</p>
+        </footer>
     </div>
 
     <script src="game.js"></script>

@@ -1,835 +1,1330 @@
+// ============================================================================
 // BULWARK 1475 - SNES-Style Castle Defense Game
-// Game Engine and Logic
+// A medieval fortress defense game with cannon combat and Tetris-like building
+// ============================================================================
+
+// ===== GAME CONSTANTS =====
+const TILE_SIZE = 16;
+const MAP_WIDTH = 40;
+const MAP_HEIGHT = 30;
+const CANVAS_WIDTH = 640;
+const CANVAS_HEIGHT = 480;
+
+// Phase durations (in seconds)
+const PHASE_DURATION = {
+    SELECT_HOME: 15,
+    PLACE_CANNONS: 15,
+    COMBAT: 25,
+    BUILDING: 20,
+    SPLASH: 3
+};
+
+// Game phases
+const PHASE = {
+    TITLE: 'TITLE',
+    SPLASH: 'SPLASH',
+    SELECT_HOME: 'SELECT_HOME',
+    PLACE_CANNONS: 'PLACE_CANNONS',
+    COMBAT: 'COMBAT',
+    BUILDING: 'BUILDING',
+    GAME_OVER: 'GAME_OVER',
+    VICTORY: 'VICTORY',
+    WALK_PLANK: 'WALK_PLANK'
+};
+
+// Terrain types
+const TERRAIN = {
+    WATER: 0,
+    GRASS: 1,
+    SAND: 2,
+    RIVER: 3
+};
 
 // ===== GAME STATE =====
-const game = {
-    state: 'title', // title, instructions, playing, paused, gameOver
-    gold: 200,
-    lives: 5,
-    wave: 0,
+const gameState = {
+    phase: PHASE.TITLE,
+    level: 1,
+    round: 1,
     score: 0,
-    enemiesDefeated: 0,
-    selectedTower: null,
-    towers: [],
-    enemies: [],
-    projectiles: [],
-    particles: [],
-    waveActive: false,
-    enemiesInWave: 0,
-    enemiesSpawned: 0
+    phaseTimer: 0,
+    nextPhaseName: '',
+    homeCastle: null,
+    selectedCastle: null,
+    hoveredCastle: null,
+    cannonsToPlace: 0,
+    activeCannon: 0,
+    cannonAngle: 0,
+    wallPieceIndex: 0,
+    wallPieceRotation: 0,
+    wallPieceX: 15,
+    wallPieceY: 10,
+    plankProgress: 0
+};
+
+// ===== GAME OBJECTS =====
+const map = {
+    terrain: [],
+    walls: [],
+    castles: [],
+    cannons: [],
+    ships: [],
+    cannonballs: [],
+    explosions: [],
+    particles: []
 };
 
 // ===== CANVAS SETUP =====
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas ? canvas.getContext('2d') : null;
-
-// ===== CONSTANTS =====
-const GRID_SIZE = 40;
-const CASTLE_X = 750;
-const CASTLE_Y = 200;
-const SPAWN_X = 50;
-const SPAWN_POINTS = [100, 200, 300, 400];
-
-// Tower configurations
-const TOWER_TYPES = {
-    archer: {
-        cost: 50,
-        damage: 20,
-        range: 150,
-        fireRate: 800,
-        color: '#27ae60',
-        projectileColor: '#8B4513',
-        name: 'Archer'
-    },
-    cannon: {
-        cost: 100,
-        damage: 60,
-        range: 180,
-        fireRate: 1500,
-        color: '#7f8c8d',
-        projectileColor: '#34495e',
-        name: 'Cannon'
-    },
-    mage: {
-        cost: 150,
-        damage: 15,
-        range: 200,
-        fireRate: 600,
-        color: '#9b59b6',
-        projectileColor: '#e74c3c',
-        aoe: 60,
-        name: 'Mage'
-    },
-    barricade: {
-        cost: 75,
-        health: 200,
-        color: '#95a5a6',
-        isWall: true,
-        name: 'Wall'
-    }
-};
-
-// Enemy configurations
-const ENEMY_TYPES = {
-    goblin: {
-        health: 50,
-        speed: 1.2,
-        damage: 1,
-        gold: 10,
-        score: 10,
-        color: '#27ae60',
-        size: 15
-    },
-    orc: {
-        health: 100,
-        speed: 0.8,
-        damage: 2,
-        gold: 20,
-        score: 25,
-        color: '#e67e22',
-        size: 18
-    },
-    troll: {
-        health: 200,
-        speed: 0.5,
-        damage: 3,
-        gold: 40,
-        score: 50,
-        color: '#c0392b',
-        size: 22
-    },
-    dragon: {
-        health: 400,
-        speed: 0.6,
-        damage: 5,
-        gold: 100,
-        score: 150,
-        color: '#8e44ad',
-        size: 28
-    }
-};
-
-// ===== SCREEN MANAGEMENT =====
-function showScreen(screenId) {
-    ['title-screen', 'instructions-screen', 'game-screen', 'game-over-screen'].forEach(id => {
-        const screen = document.getElementById(id);
-        if (screen) screen.style.display = 'none';
-    });
-    const screen = document.getElementById(screenId);
-    if (screen) screen.style.display = 'block';
-}
-
-// ===== UI EVENT HANDLERS =====
-function initUI() {
-    const startBtn = document.getElementById('start-btn');
-    const instructionsBtn = document.getElementById('instructions-btn');
-    const backBtn = document.getElementById('back-btn');
-    const restartBtn = document.getElementById('restart-btn');
-    const menuBtn = document.getElementById('menu-btn');
-    const nextWaveBtn = document.getElementById('next-wave-btn');
-
-    if (startBtn) startBtn.addEventListener('click', startGame);
-    if (instructionsBtn) instructionsBtn.addEventListener('click', () => showScreen('instructions-screen'));
-    if (backBtn) backBtn.addEventListener('click', () => showScreen('title-screen'));
-    if (restartBtn) restartBtn.addEventListener('click', startGame);
-    if (menuBtn) menuBtn.addEventListener('click', () => {
-        showScreen('title-screen');
-        game.state = 'title';
-    });
-    if (nextWaveBtn) nextWaveBtn.addEventListener('click', startNextWave);
-
-    // Tower selection
-    document.querySelectorAll('.tower-option').forEach(option => {
-        option.addEventListener('click', () => {
-            const towerType = option.dataset.tower;
-            const cost = parseInt(option.dataset.cost);
-            if (game.gold >= cost) {
-                game.selectedTower = towerType;
-                updateTowerSelection();
-            }
-        });
-    });
-
-    // Canvas click for tower placement
-    if (canvas) {
-        canvas.addEventListener('click', handleCanvasClick);
-        canvas.addEventListener('mousemove', handleMouseMove);
-    }
-
-    // Keyboard controls
-    document.addEventListener('keydown', handleKeyPress);
-}
-
 let mouseX = 0, mouseY = 0;
+let mouseGridX = 0, mouseGridY = 0;
+let keys = {};
 
+// ===== WALL PIECE SHAPES (Tetris-like) =====
+const WALL_PIECES = [
+    // I-piece (line)
+    [[1,1,1,1]],
+    // O-piece (square)
+    [[1,1],[1,1]],
+    // T-piece
+    [[1,1,1],[0,1,0]],
+    // L-piece
+    [[1,0],[1,0],[1,1]],
+    // J-piece
+    [[0,1],[0,1],[1,1]],
+    // S-piece
+    [[0,1,1],[1,1,0]],
+    // Z-piece
+    [[1,1,0],[0,1,1]]
+];
+
+// ===== CASTLE POSITIONS FOR EACH LEVEL =====
+const LEVEL_CASTLES = [
+    // Level 1
+    [
+        {x: 8, y: 8}, {x: 25, y: 8}, {x: 8, y: 20},
+        {x: 25, y: 20}, {x: 16, y: 14}
+    ],
+    // Level 2
+    [
+        {x: 10, y: 6}, {x: 28, y: 6}, {x: 6, y: 22},
+        {x: 30, y: 22}, {x: 18, y: 15}
+    ],
+    // Level 3
+    [
+        {x: 12, y: 10}, {x: 26, y: 10}, {x: 12, y: 18},
+        {x: 26, y: 18}, {x: 19, y: 14}
+    ],
+    // Level 4
+    [
+        {x: 9, y: 7}, {x: 27, y: 9}, {x: 10, y: 21},
+        {x: 28, y: 19}, {x: 18, y: 14}
+    ],
+    // Level 5
+    [
+        {x: 11, y: 9}, {x: 25, y: 8}, {x: 9, y: 19},
+        {x: 27, y: 20}, {x: 17, y: 14}
+    ]
+];
+
+// ===== INITIALIZATION =====
+function init() {
+    if (!canvas || !ctx) return;
+    
+    // Set up canvas
+    canvas.style.cursor = 'crosshair';
+    
+    // Event listeners
+    const playBtn = document.getElementById('playBtn');
+    if (playBtn) {
+        playBtn.addEventListener('click', startNewGame);
+    }
+    
+    canvas.addEventListener('mousemove', handleMouseMove);
+    canvas.addEventListener('click', handleClick);
+    document.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('keyup', handleKeyUp);
+    
+    // Initialize terrain
+    initTerrain();
+    
+    // Show title screen
+    gameState.phase = PHASE.TITLE;
+    
+    // Start game loop
+    requestAnimationFrame(gameLoop);
+}
+
+// ===== TERRAIN GENERATION =====
+function initTerrain() {
+    map.terrain = [];
+    for (let y = 0; y < MAP_HEIGHT; y++) {
+        map.terrain[y] = [];
+        for (let x = 0; x < MAP_WIDTH; x++) {
+            // Water borders
+            if (y < 3 || y > MAP_HEIGHT - 4 || x < 2 || x > MAP_WIDTH - 3) {
+                map.terrain[y][x] = TERRAIN.WATER;
+            }
+            // Sand near water
+            else if (y < 5 || y > MAP_HEIGHT - 6 || x < 4 || x > MAP_WIDTH - 5) {
+                map.terrain[y][x] = TERRAIN.SAND;
+            }
+            // River in middle (vertical)
+            else if (x >= MAP_WIDTH / 2 - 1 && x <= MAP_WIDTH / 2 + 1) {
+                map.terrain[y][x] = TERRAIN.RIVER;
+            }
+            // Grass
+            else {
+                map.terrain[y][x] = TERRAIN.GRASS;
+            }
+        }
+    }
+}
+
+// ===== INPUT HANDLING =====
 function handleMouseMove(e) {
     const rect = canvas.getBoundingClientRect();
     mouseX = e.clientX - rect.left;
     mouseY = e.clientY - rect.top;
-}
-
-function handleCanvasClick(e) {
-    if (game.state !== 'playing') return;
-
-    const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-
-    if (game.selectedTower) {
-        placeTower(x, y);
+    mouseGridX = Math.floor(mouseX / TILE_SIZE);
+    mouseGridY = Math.floor(mouseY / TILE_SIZE);
+    
+    // Check hovered castle in selection phase
+    if (gameState.phase === PHASE.SELECT_HOME) {
+        gameState.hoveredCastle = null;
+        map.castles.forEach((castle, i) => {
+            const dx = mouseGridX - castle.x;
+            const dy = mouseGridY - castle.y;
+            if (Math.abs(dx) < 2 && Math.abs(dy) < 2) {
+                gameState.hoveredCastle = i;
+            }
+        });
     }
 }
 
-function handleKeyPress(e) {
-    if (game.state !== 'playing') return;
+function handleClick(e) {
+    if (gameState.phase === PHASE.SELECT_HOME && gameState.hoveredCastle !== null) {
+        selectHomeCastle(gameState.hoveredCastle);
+    }
+    else if (gameState.phase === PHASE.PLACE_CANNONS && gameState.cannonsToPlace > 0) {
+        placeCannon(mouseGridX, mouseGridY);
+    }
+    else if (gameState.phase === PHASE.COMBAT) {
+        fireCannon();
+    }
+    else if (gameState.phase === PHASE.BUILDING) {
+        placeWallPiece();
+    }
+}
 
-    // Tower selection keys 1-4
-    if (e.key >= '1' && e.key <= '4') {
-        const towers = ['archer', 'cannon', 'mage', 'barricade'];
-        const towerType = towers[parseInt(e.key) - 1];
-        const cost = TOWER_TYPES[towerType].cost;
-        if (game.gold >= cost) {
-            game.selectedTower = towerType;
-            updateTowerSelection();
+function handleKeyDown(e) {
+    keys[e.key.toLowerCase()] = true;
+    
+    if (gameState.phase === PHASE.COMBAT) {
+        if (e.key === 'q' || e.key === 'Q') {
+            gameState.activeCannon = Math.max(0, gameState.activeCannon - 1);
+        }
+        else if (e.key === 'e' || e.key === 'E') {
+            gameState.activeCannon = Math.min(map.cannons.length - 1, gameState.activeCannon + 1);
+        }
+        else if (e.key === 'ArrowLeft') {
+            gameState.cannonAngle -= 5;
+        }
+        else if (e.key === 'ArrowRight') {
+            gameState.cannonAngle += 5;
+        }
+        else if (e.key === ' ') {
+            e.preventDefault();
+            fireCannon();
         }
     }
-
-    // Space to start wave
-    if (e.key === ' ' && !game.waveActive) {
-        e.preventDefault();
-        startNextWave();
-    }
-
-    // ESC to pause (future feature)
-    if (e.key === 'Escape') {
-        // game.state = game.state === 'playing' ? 'paused' : 'playing';
+    else if (gameState.phase === PHASE.BUILDING) {
+        if (e.key === 'ArrowLeft') {
+            gameState.wallPieceX = Math.max(0, gameState.wallPieceX - 1);
+        }
+        else if (e.key === 'ArrowRight') {
+            gameState.wallPieceX = Math.min(MAP_WIDTH - 5, gameState.wallPieceX + 1);
+        }
+        else if (e.key === 'ArrowUp') {
+            gameState.wallPieceY = Math.max(0, gameState.wallPieceY - 1);
+        }
+        else if (e.key === 'ArrowDown') {
+            gameState.wallPieceY = Math.min(MAP_HEIGHT - 5, gameState.wallPieceY + 1);
+        }
+        else if (e.key === 'z' || e.key === 'Z') {
+            gameState.wallPieceRotation = (gameState.wallPieceRotation + 3) % 4;
+        }
+        else if (e.key === 'x' || e.key === 'X') {
+            gameState.wallPieceRotation = (gameState.wallPieceRotation + 1) % 4;
+        }
+        else if (e.key === ' ') {
+            e.preventDefault();
+            placeWallPiece();
+        }
     }
 }
 
-function updateTowerSelection() {
-    document.querySelectorAll('.tower-option').forEach(option => {
-        option.classList.remove('selected');
-        const cost = parseInt(option.dataset.cost);
-        if (game.gold < cost) {
-            option.classList.add('disabled');
-        } else {
-            option.classList.remove('disabled');
+function handleKeyUp(e) {
+    keys[e.key.toLowerCase()] = false;
+}
+
+// ===== GAME FLOW =====
+function startNewGame() {
+    gameState.level = 1;
+    gameState.round = 1;
+    gameState.score = 0;
+    gameState.homeCastle = null;
+    startLevel();
+}
+
+function startLevel() {
+    // Clear game objects
+    map.walls = [];
+    map.castles = [];
+    map.cannons = [];
+    map.ships = [];
+    map.cannonballs = [];
+    map.explosions = [];
+    
+    // Create castles for this level
+    const castlePositions = LEVEL_CASTLES[gameState.level - 1];
+    castlePositions.forEach((pos, i) => {
+        map.castles.push({
+            x: pos.x,
+            y: pos.y,
+            isHome: false,
+            enclosed: false,
+            owner: 'neutral'
+        });
+    });
+    
+    // Start castle selection phase
+    startPhase(PHASE.SELECT_HOME);
+}
+
+function startPhase(phase) {
+    gameState.phase = PHASE.SPLASH;
+    gameState.nextPhaseName = phase;
+    gameState.phaseTimer = PHASE_DURATION.SPLASH;
+}
+
+function transitionToNextPhase() {
+    gameState.phase = gameState.nextPhaseName;
+    
+    switch (gameState.phase) {
+        case PHASE.SELECT_HOME:
+            gameState.phaseTimer = PHASE_DURATION.SELECT_HOME;
+            gameState.hoveredCastle = null;
+            break;
+            
+        case PHASE.PLACE_CANNONS:
+            gameState.phaseTimer = PHASE_DURATION.PLACE_CANNONS;
+            gameState.activeCannon = 0;
+            countEnclosedCastles();
+            gameState.cannonsToPlace = getCannonsAvailable();
+            break;
+            
+        case PHASE.COMBAT:
+            gameState.phaseTimer = PHASE_DURATION.COMBAT;
+            gameState.cannonAngle = -90; // Start facing up
+            spawnEnemyShips();
+            break;
+            
+        case PHASE.BUILDING:
+            gameState.phaseTimer = PHASE_DURATION.BUILDING;
+            gameState.wallPieceIndex = Math.floor(Math.random() * WALL_PIECES.length);
+            gameState.wallPieceRotation = 0;
+            gameState.wallPieceX = 15;
+            gameState.wallPieceY = 10;
+            break;
+    }
+}
+
+function selectHomeCastle(index) {
+    gameState.homeCastle = index;
+    map.castles[index].isHome = true;
+    map.castles[index].owner = 'player';
+    
+    // Build walls around home castle
+    buildInitialWalls(map.castles[index]);
+    
+    // Move to cannon placement
+    startPhase(PHASE.PLACE_CANNONS);
+    playSound('place');
+}
+
+function buildInitialWalls(castle) {
+    // Build a rectangle of walls around the castle
+    const size = 4;
+    for (let dy = -size; dy <= size; dy++) {
+        for (let dx = -size; dx <= size; dx++) {
+            if (Math.abs(dx) === size || Math.abs(dy) === size) {
+                const wx = castle.x + dx;
+                const wy = castle.y + dy;
+                if (wx >= 0 && wx < MAP_WIDTH && wy >= 0 && wy < MAP_HEIGHT) {
+                    if (!getWall(wx, wy)) {
+                        map.walls.push({x: wx, y: wy, health: 100});
+                    }
+                }
+            }
         }
-        if (option.dataset.tower === game.selectedTower) {
-            option.classList.add('selected');
+    }
+}
+
+function getCannonsAvailable() {
+    let count = 0;
+    map.castles.forEach(castle => {
+        if (castle.owner === 'player' && castle.enclosed) {
+            count += castle.isHome ? 2 : 1;
+        }
+    });
+    return count;
+}
+
+function placeCannon(x, y) {
+    // Check if inside player's walled area
+    if (!isInsidePlayerWalls(x, y)) return;
+    
+    // Check not overlapping castle or other cannons
+    for (let castle of map.castles) {
+        if (Math.abs(castle.x - x) < 2 && Math.abs(castle.y - y) < 2) return;
+    }
+    for (let cannon of map.cannons) {
+        if (cannon.x === x && cannon.y === y) return;
+    }
+    
+    map.cannons.push({
+        x, y,
+        angle: -90,
+        cooldown: 0
+    });
+    
+    gameState.cannonsToPlace--;
+    playSound('place');
+    
+    if (gameState.cannonsToPlace === 0) {
+        startPhase(PHASE.COMBAT);
+    }
+}
+
+function fireCannon() {
+    if (map.cannons.length === 0) return;
+    
+    const cannon = map.cannons[gameState.activeCannon];
+    if (!cannon || cannon.cooldown > 0) return;
+    
+    const angle = gameState.cannonAngle * Math.PI / 180;
+    const speed = 3;
+    
+    map.cannonballs.push({
+        x: cannon.x * TILE_SIZE + TILE_SIZE / 2,
+        y: cannon.y * TILE_SIZE + TILE_SIZE / 2,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        owner: 'player',
+        damage: 50
+    });
+    
+    cannon.cooldown = 30;
+    playSound('cannon');
+}
+
+function placeWallPiece() {
+    const piece = getRotatedPiece(WALL_PIECES[gameState.wallPieceIndex], gameState.wallPieceRotation);
+    
+    // Check if can place
+    if (!canPlaceWallPiece(piece, gameState.wallPieceX, gameState.wallPieceY)) return;
+    
+    // Place the piece
+    for (let py = 0; py < piece.length; py++) {
+        for (let px = 0; px < piece[py].length; px++) {
+            if (piece[py][px]) {
+                const wx = gameState.wallPieceX + px;
+                const wy = gameState.wallPieceY + py;
+                if (!getWall(wx, wy)) {
+                    map.walls.push({x: wx, y: wy, health: 100});
+                }
+            }
+        }
+    }
+    
+    // Get next random piece
+    gameState.wallPieceIndex = Math.floor(Math.random() * WALL_PIECES.length);
+    gameState.wallPieceRotation = 0;
+    
+    playSound('place');
+}
+
+function canPlaceWallPiece(piece, startX, startY) {
+    for (let py = 0; py < piece.length; py++) {
+        for (let px = 0; px < piece[py].length; px++) {
+            if (piece[py][px]) {
+                const wx = startX + px;
+                const wy = startY + py;
+                
+                // Out of bounds
+                if (wx < 0 || wx >= MAP_WIDTH || wy < 0 || wy >= MAP_HEIGHT) return false;
+                
+                // On water or river
+                if (map.terrain[wy][wx] === TERRAIN.WATER || map.terrain[wy][wx] === TERRAIN.RIVER) return false;
+                
+                // Overlapping existing wall
+                if (getWall(wx, wy)) return false;
+                
+                // Overlapping castle
+                for (let castle of map.castles) {
+                    if (Math.abs(castle.x - wx) < 2 && Math.abs(castle.y - wy) < 2) return false;
+                }
+                
+                // Overlapping cannon
+                for (let cannon of map.cannons) {
+                    if (cannon.x === wx && cannon.y === wy) return false;
+                }
+            }
+        }
+    }
+    return true;
+}
+
+function getRotatedPiece(piece, rotation) {
+    let result = piece;
+    for (let i = 0; i < rotation; i++) {
+        result = rotatePiece90(result);
+    }
+    return result;
+}
+
+function rotatePiece90(piece) {
+    const rows = piece.length;
+    const cols = piece[0].length;
+    const rotated = [];
+    
+    for (let x = 0; x < cols; x++) {
+        rotated[x] = [];
+        for (let y = 0; y < rows; y++) {
+            rotated[x][y] = piece[rows - 1 - y][x];
+        }
+    }
+    
+    return rotated;
+}
+
+function spawnEnemyShips() {
+    const shipCount = 3 + gameState.level;
+    const speed = 0.3 + gameState.level * 0.1;
+    
+    for (let i = 0; i < shipCount; i++) {
+        map.ships.push({
+            x: (MAP_WIDTH / 2 + 3 + Math.random() * 5) * TILE_SIZE,
+            y: (5 + i * 3) * TILE_SIZE,
+            health: 50 + gameState.level * 10,
+            maxHealth: 50 + gameState.level * 10,
+            speed,
+            fireTimer: Math.random() * 60,
+            bobOffset: Math.random() * Math.PI * 2
+        });
+    }
+}
+
+function countEnclosedCastles() {
+    map.castles.forEach(castle => {
+        if (castle.owner === 'player') {
+            castle.enclosed = isCastleEnclosed(castle);
         }
     });
 }
 
-// ===== TOWER PLACEMENT =====
-function placeTower(x, y) {
-    const towerConfig = TOWER_TYPES[game.selectedTower];
-
-    // Check if can afford
-    if (game.gold < towerConfig.cost) return;
-
-    // Check if valid placement (not too close to castle, not on other towers)
-    if (Math.abs(x - CASTLE_X) < 80 && Math.abs(y - CASTLE_Y) < 80) return;
-
-    for (let tower of game.towers) {
-        const dist = Math.hypot(x - tower.x, y - tower.y);
-        if (dist < 35) return;
-    }
-
-    // Create tower
-    const tower = {
-        x,
-        y,
-        type: game.selectedTower,
-        ...towerConfig,
-        lastFire: 0,
-        target: null
-    };
-
-    game.towers.push(tower);
-    game.gold -= towerConfig.cost;
-    updateHUD();
-    playSound('place');
-}
-
-// ===== WAVE MANAGEMENT =====
-function startNextWave() {
-    if (game.waveActive) return;
-
-    game.wave++;
-    game.waveActive = true;
-    game.enemiesSpawned = 0;
-
-    // Calculate enemies for this wave
-    const baseEnemies = 5 + game.wave * 2;
-    game.enemiesInWave = baseEnemies;
-
-    updateHUD();
-    spawnEnemies();
-
-    const btn = document.getElementById('next-wave-btn');
-    if (btn) btn.disabled = true;
-}
-
-function spawnEnemies() {
-    if (game.enemiesSpawned >= game.enemiesInWave) return;
-
-    // Determine enemy type based on wave
-    let enemyType = 'goblin';
-    if (game.wave >= 10) enemyType = 'dragon';
-    else if (game.wave >= 6) enemyType = 'troll';
-    else if (game.wave >= 3) enemyType = 'orc';
-
-    // Mix in some harder enemies occasionally
-    if (game.wave >= 5 && Math.random() < 0.3) {
-        const types = ['orc', 'troll', 'dragon'];
-        enemyType = types[Math.min(Math.floor(game.wave / 4), 2)];
-    }
-
-    const enemyConfig = ENEMY_TYPES[enemyType];
-    const spawnY = SPAWN_POINTS[Math.floor(Math.random() * SPAWN_POINTS.length)];
-
-    const enemy = {
-        x: SPAWN_X,
-        y: spawnY,
-        type: enemyType,
-        ...enemyConfig,
-        maxHealth: enemyConfig.health,
-        targetX: CASTLE_X,
-        targetY: CASTLE_Y
-    };
-
-    game.enemies.push(enemy);
-    game.enemiesSpawned++;
-
-    // Schedule next spawn
-    if (game.enemiesSpawned < game.enemiesInWave) {
-        setTimeout(spawnEnemies, 1000 - game.wave * 20);
-    }
-}
-
-// ===== GAME LOOP =====
-let lastTime = 0;
-
-function gameLoop(timestamp) {
-    if (!ctx) return;
-
-    const deltaTime = timestamp - lastTime;
-    lastTime = timestamp;
-
-    if (game.state === 'playing') {
-        update(deltaTime);
-        render();
-    }
-
-    requestAnimationFrame(gameLoop);
-}
-
-function update(deltaTime) {
-    // Update enemies
-    for (let i = game.enemies.length - 1; i >= 0; i--) {
-        const enemy = game.enemies[i];
-
-        // Move towards castle
-        const dx = enemy.targetX - enemy.x;
-        const dy = enemy.targetY - enemy.y;
-        const dist = Math.hypot(dx, dy);
-
-        if (dist > 30) {
-            enemy.x += (dx / dist) * enemy.speed;
-            enemy.y += (dy / dist) * enemy.speed;
-        } else {
-            // Reached castle
-            game.lives -= enemy.damage;
-            game.enemies.splice(i, 1);
-            updateHUD();
-            playSound('damage');
-
-            if (game.lives <= 0) {
-                gameOver();
-            }
-            continue;
+function isCastleEnclosed(castle) {
+    // Use flood fill to check if castle is enclosed
+    const visited = Array(MAP_HEIGHT).fill(null).map(() => Array(MAP_WIDTH).fill(false));
+    const queue = [{x: castle.x, y: castle.y}];
+    visited[castle.y][castle.x] = true;
+    
+    while (queue.length > 0) {
+        const pos = queue.shift();
+        
+        // If we reach the edge, not enclosed
+        if (pos.x <= 2 || pos.x >= MAP_WIDTH - 3 || pos.y <= 2 || pos.y >= MAP_HEIGHT - 3) {
+            return false;
         }
-    }
-
-    // Update towers
-    for (let tower of game.towers) {
-        if (tower.isWall) continue;
-
-        // Find target
-        tower.target = null;
-        let closestDist = tower.range;
-
-        for (let enemy of game.enemies) {
-            const dist = Math.hypot(enemy.x - tower.x, enemy.y - tower.y);
-            if (dist < closestDist) {
-                closestDist = dist;
-                tower.target = enemy;
-            }
-        }
-
-        // Fire at target
-        if (tower.target && Date.now() - tower.lastFire > tower.fireRate) {
-            fireTower(tower);
-            tower.lastFire = Date.now();
-        }
-    }
-
-    // Update projectiles
-    for (let i = game.projectiles.length - 1; i >= 0; i--) {
-        const proj = game.projectiles[i];
-
-        if (!proj.target || proj.target.health <= 0) {
-            game.projectiles.splice(i, 1);
-            continue;
-        }
-
-        const dx = proj.target.x - proj.x;
-        const dy = proj.target.y - proj.y;
-        const dist = Math.hypot(dx, dy);
-
-        if (dist < 10) {
-            // Hit target
-            hitEnemy(proj.target, proj.damage, proj.aoe, proj.x, proj.y);
-            game.projectiles.splice(i, 1);
-        } else {
-            proj.x += (dx / dist) * proj.speed;
-            proj.y += (dy / dist) * proj.speed;
-        }
-    }
-
-    // Update particles
-    for (let i = game.particles.length - 1; i >= 0; i--) {
-        const p = game.particles[i];
-        p.life -= deltaTime;
-        p.x += p.vx;
-        p.y += p.vy;
-        p.vy += 0.1; // gravity
-
-        if (p.life <= 0) {
-            game.particles.splice(i, 1);
-        }
-    }
-
-    // Check if wave is complete
-    if (game.waveActive && game.enemies.length === 0 && game.enemiesSpawned >= game.enemiesInWave) {
-        game.waveActive = false;
-        game.gold += 50 + game.wave * 10; // Wave completion bonus
-        updateHUD();
-
-        const btn = document.getElementById('next-wave-btn');
-        if (btn) btn.disabled = false;
-    }
-}
-
-function fireTower(tower) {
-    const projectile = {
-        x: tower.x,
-        y: tower.y,
-        target: tower.target,
-        damage: tower.damage,
-        speed: 5,
-        color: tower.projectileColor,
-        aoe: tower.aoe || 0
-    };
-
-    game.projectiles.push(projectile);
-    playSound('shoot');
-}
-
-function hitEnemy(enemy, damage, aoe, x, y) {
-    enemy.health -= damage;
-
-    // AoE damage
-    if (aoe) {
-        for (let e of game.enemies) {
-            if (e !== enemy) {
-                const dist = Math.hypot(e.x - x, e.y - y);
-                if (dist < aoe) {
-                    e.health -= damage * 0.5;
+        
+        // Check neighbors
+        const neighbors = [
+            {x: pos.x - 1, y: pos.y},
+            {x: pos.x + 1, y: pos.y},
+            {x: pos.x, y: pos.y - 1},
+            {x: pos.x, y: pos.y + 1}
+        ];
+        
+        for (let n of neighbors) {
+            if (n.x >= 0 && n.x < MAP_WIDTH && n.y >= 0 && n.y < MAP_HEIGHT) {
+                if (!visited[n.y][n.x] && !getWall(n.x, n.y)) {
+                    visited[n.y][n.x] = true;
+                    queue.push(n);
                 }
             }
         }
-        createExplosion(x, y, aoe);
     }
+    
+    return true;
+}
 
-    if (enemy.health <= 0) {
-        killEnemy(enemy);
+function isInsidePlayerWalls(x, y) {
+    for (let castle of map.castles) {
+        if (castle.owner === 'player' && castle.enclosed) {
+            if (!canReachEdgeFromPoint(x, y)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+function canReachEdgeFromPoint(startX, startY) {
+    const visited = Array(MAP_HEIGHT).fill(null).map(() => Array(MAP_WIDTH).fill(false));
+    const queue = [{x: startX, y: startY}];
+    visited[startY][startX] = true;
+    
+    while (queue.length > 0) {
+        const pos = queue.shift();
+        
+        if (pos.x <= 2 || pos.x >= MAP_WIDTH - 3 || pos.y <= 2 || pos.y >= MAP_HEIGHT - 3) {
+            return true;
+        }
+        
+        const neighbors = [
+            {x: pos.x - 1, y: pos.y},
+            {x: pos.x + 1, y: pos.y},
+            {x: pos.x, y: pos.y - 1},
+            {x: pos.x, y: pos.y + 1}
+        ];
+        
+        for (let n of neighbors) {
+            if (n.x >= 0 && n.x < MAP_WIDTH && n.y >= 0 && n.y < MAP_HEIGHT) {
+                if (!visited[n.y][n.x] && !getWall(n.x, n.y)) {
+                    visited[n.y][n.x] = true;
+                    queue.push(n);
+                }
+            }
+        }
+    }
+    
+    return false;
+}
+
+function getWall(x, y) {
+    return map.walls.find(w => w.x === x && w.y === y);
+}
+
+function endPhase() {
+    switch (gameState.phase) {
+        case PHASE.SELECT_HOME:
+            // Auto-select if time ran out
+            if (gameState.homeCastle === null) {
+                selectHomeCastle(0);
+            }
+            break;
+            
+        case PHASE.PLACE_CANNONS:
+            // Just move to combat even if not all cannons placed
+            startPhase(PHASE.COMBAT);
+            break;
+            
+        case PHASE.COMBAT:
+            startPhase(PHASE.BUILDING);
+            break;
+            
+        case PHASE.BUILDING:
+            // Check enclosure
+            countEnclosedCastles();
+            const enclosedCount = map.castles.filter(c => c.owner === 'player' && c.enclosed).length;
+            
+            if (enclosedCount === 0) {
+                gameState.phase = PHASE.GAME_OVER;
+            } else {
+                // Next round
+                gameState.round++;
+                if (gameState.round > 3) {
+                    // Next level
+                    gameState.level++;
+                    gameState.round = 1;
+                    
+                    if (gameState.level > 5) {
+                        gameState.phase = PHASE.VICTORY;
+                        gameState.plankProgress = 0;
+                    } else {
+                        startLevel();
+                    }
+                } else {
+                    startPhase(PHASE.PLACE_CANNONS);
+                }
+            }
+            break;
     }
 }
 
-function killEnemy(enemy) {
-    const index = game.enemies.indexOf(enemy);
-    if (index > -1) {
-        game.enemies.splice(index, 1);
-        game.gold += enemy.gold;
-        game.score += enemy.score;
-        game.enemiesDefeated++;
-        updateHUD();
-        createParticles(enemy.x, enemy.y, enemy.color);
-        playSound('kill');
+// ===== UPDATE LOOP =====
+let lastTime = 0;
+
+function gameLoop(timestamp) {
+    const dt = (timestamp - lastTime) / 1000;
+    lastTime = timestamp;
+    
+    update(dt);
+    render();
+    
+    requestAnimationFrame(gameLoop);
+}
+
+function update(dt) {
+    if (gameState.phase === PHASE.TITLE || gameState.phase === PHASE.GAME_OVER) {
+        return;
     }
+    
+    // Update timer
+    if (gameState.phase === PHASE.SPLASH) {
+        gameState.phaseTimer -= dt;
+        if (gameState.phaseTimer <= 0) {
+            transitionToNextPhase();
+        }
+        return;
+    }
+    
+    // Phase-specific updates
+    if (gameState.phaseTimer > 0) {
+        gameState.phaseTimer -= dt;
+        if (gameState.phaseTimer <= 0) {
+            endPhase();
+            return;
+        }
+    }
+    
+    // Update cannons
+    map.cannons.forEach(cannon => {
+        if (cannon.cooldown > 0) cannon.cooldown--;
+    });
+    
+    // Update ships
+    if (gameState.phase === PHASE.COMBAT) {
+        updateShips(dt);
+    }
+    
+    // Update cannonballs
+    updateCannonballs(dt);
+    
+    // Update explosions
+    updateExplosions(dt);
+    
+    // Update particles
+    updateParticles(dt);
+    
+    // Victory animation
+    if (gameState.phase === PHASE.VICTORY) {
+        gameState.plankProgress += dt * 30;
+    }
+}
+
+function updateShips(dt) {
+    map.ships.forEach((ship, i) => {
+        // Bob animation
+        ship.bobOffset += dt * 2;
+        
+        // Move ship
+        ship.y += ship.speed;
+        
+        // Fire at player walls
+        ship.fireTimer -= dt * 60;
+        if (ship.fireTimer <= 0) {
+            ship.fireTimer = 60 + Math.random() * 60;
+            fireEnemyCannon(ship);
+        }
+        
+        // Remove if off screen
+        if (ship.y > CANVAS_HEIGHT + 50) {
+            map.ships.splice(i, 1);
+        }
+    });
+}
+
+function fireEnemyCannon(ship) {
+    // Find random player wall to target
+    if (map.walls.length === 0) return;
+    
+    const target = map.walls[Math.floor(Math.random() * map.walls.length)];
+    const dx = target.x * TILE_SIZE - ship.x;
+    const dy = target.y * TILE_SIZE - ship.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const speed = 2;
+    
+    map.cannonballs.push({
+        x: ship.x,
+        y: ship.y,
+        vx: (dx / dist) * speed,
+        vy: (dy / dist) * speed,
+        owner: 'enemy',
+        damage: 30 + gameState.level * 5
+    });
+    
+    playSound('cannon');
+}
+
+function updateCannonballs(dt) {
+    for (let i = map.cannonballs.length - 1; i >= 0; i--) {
+        const ball = map.cannonballs[i];
+        ball.x += ball.vx;
+        ball.y += ball.vy;
+        
+        const gridX = Math.floor(ball.x / TILE_SIZE);
+        const gridY = Math.floor(ball.y / TILE_SIZE);
+        
+        // Check collision with walls
+        const wall = getWall(gridX, gridY);
+        if (wall) {
+            wall.health -= ball.damage;
+            if (wall.health <= 0) {
+                const idx = map.walls.indexOf(wall);
+                if (idx > -1) map.walls.splice(idx, 1);
+                gameState.score += 5;
+            }
+            createExplosion(ball.x, ball.y);
+            map.cannonballs.splice(i, 1);
+            continue;
+        }
+        
+        // Check collision with ships (player shots)
+        if (ball.owner === 'player') {
+            for (let j = 0; j < map.ships.length; j++) {
+                const ship = map.ships[j];
+                const dx = ball.x - ship.x;
+                const dy = ball.y - ship.y;
+                if (Math.sqrt(dx * dx + dy * dy) < 20) {
+                    ship.health -= ball.damage;
+                    if (ship.health <= 0) {
+                        map.ships.splice(j, 1);
+                        gameState.score += 100;
+                    }
+                    createExplosion(ball.x, ball.y);
+                    map.cannonballs.splice(i, 1);
+                    break;
+                }
+            }
+        }
+        
+        // Remove if off screen
+        if (ball.x < 0 || ball.x > CANVAS_WIDTH || ball.y < 0 || ball.y > CANVAS_HEIGHT) {
+            map.cannonballs.splice(i, 1);
+        }
+    }
+}
+
+function updateExplosions(dt) {
+    for (let i = map.explosions.length - 1; i >= 0; i--) {
+        map.explosions[i].life -= dt;
+        map.explosions[i].radius += dt * 50;
+        if (map.explosions[i].life <= 0) {
+            map.explosions.splice(i, 1);
+        }
+    }
+}
+
+function updateParticles(dt) {
+    for (let i = map.particles.length - 1; i >= 0; i--) {
+        const p = map.particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += 0.2; // gravity
+        p.life -= dt;
+        if (p.life <= 0) {
+            map.particles.splice(i, 1);
+        }
+    }
+}
+
+function createExplosion(x, y) {
+    map.explosions.push({
+        x, y,
+        radius: 5,
+        life: 0.3
+    });
+    
+    // Create particles
+    for (let i = 0; i < 10; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 2 + Math.random() * 3;
+        map.particles.push({
+            x, y,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed - 2,
+            life: 0.5 + Math.random() * 0.5,
+            color: `hsl(${Math.random() * 60 + 10}, 100%, 50%)`
+        });
+    }
+    
+    playSound('explosion');
 }
 
 // ===== RENDERING =====
 function render() {
-    // Clear canvas
     ctx.fillStyle = '#2d4739';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    // Draw grid (subtle)
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
-    ctx.lineWidth = 1;
-    for (let x = 0; x < canvas.width; x += GRID_SIZE) {
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, canvas.height);
-        ctx.stroke();
+    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    
+    if (gameState.phase === PHASE.TITLE) {
+        renderTitleScreen();
+        return;
     }
-    for (let y = 0; y < canvas.height; y += GRID_SIZE) {
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(canvas.width, y);
-        ctx.stroke();
+    
+    if (gameState.phase === PHASE.GAME_OVER) {
+        renderGameOverScreen();
+        return;
     }
-
-    // Draw path indicator
-    ctx.strokeStyle = 'rgba(139, 69, 19, 0.3)';
-    ctx.lineWidth = 40;
-    SPAWN_POINTS.forEach(y => {
-        ctx.beginPath();
-        ctx.moveTo(SPAWN_X, y);
-        ctx.lineTo(CASTLE_X, CASTLE_Y);
-        ctx.stroke();
-    });
-
-    // Draw castle
-    drawCastle();
-
-    // Draw towers
-    for (let tower of game.towers) {
-        drawTower(tower);
+    
+    if (gameState.phase === PHASE.VICTORY) {
+        renderVictoryScreen();
+        return;
     }
-
-    // Draw enemies
-    for (let enemy of game.enemies) {
-        drawEnemy(enemy);
+    
+    if (gameState.phase === PHASE.SPLASH) {
+        renderSplashScreen();
+        return;
     }
-
-    // Draw projectiles
-    for (let proj of game.projectiles) {
-        drawProjectile(proj);
+    
+    // Render terrain
+    renderTerrain();
+    
+    // Render walls
+    renderWalls();
+    
+    // Render castles
+    renderCastles();
+    
+    // Render cannons
+    renderCannons();
+    
+    // Render ships
+    renderShips();
+    
+    // Render cannonballs
+    renderCannonballs();
+    
+    // Render explosions
+    renderExplosions();
+    
+    // Render particles
+    renderParticles();
+    
+    // Phase-specific rendering
+    if (gameState.phase === PHASE.BUILDING) {
+        renderWallPiecePreview();
     }
-
-    // Draw particles
-    for (let p of game.particles) {
-        drawParticle(p);
+    
+    if (gameState.phase === PHASE.COMBAT && map.cannons.length > 0) {
+        renderCannonAim();
     }
-
-    // Draw tower preview
-    if (game.selectedTower && mouseX && mouseY) {
-        drawTowerPreview(mouseX, mouseY);
-    }
+    
+    // Render HUD
+    renderHUD();
 }
 
-function drawCastle() {
-    const x = CASTLE_X;
-    const y = CASTLE_Y;
-
-    // Castle base
-    ctx.fillStyle = '#7f8c8d';
-    ctx.fillRect(x - 30, y - 20, 60, 40);
-
-    // Castle top
-    ctx.fillStyle = '#95a5a6';
-    ctx.fillRect(x - 35, y - 40, 70, 20);
-
-    // Crenellations
-    ctx.fillStyle = '#7f8c8d';
-    for (let i = 0; i < 5; i++) {
-        ctx.fillRect(x - 30 + i * 15, y - 50, 10, 10);
-    }
-
-    // Door
-    ctx.fillStyle = '#34495e';
-    ctx.fillRect(x - 10, y, 20, 20);
-
-    // Flag
-    ctx.strokeStyle = '#c0392b';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(x, y - 50);
-    ctx.lineTo(x, y - 75);
-    ctx.stroke();
-
-    ctx.fillStyle = '#e74c3c';
-    ctx.beginPath();
-    ctx.moveTo(x, y - 75);
-    ctx.lineTo(x + 15, y - 68);
-    ctx.lineTo(x, y - 61);
-    ctx.fill();
-}
-
-function drawTower(tower) {
-    ctx.save();
-
-    if (tower.isWall) {
-        // Draw wall/barricade
-        ctx.fillStyle = tower.color;
-        ctx.fillRect(tower.x - 15, tower.y - 15, 30, 30);
-        ctx.strokeStyle = '#7f8c8d';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(tower.x - 15, tower.y - 15, 30, 30);
-
-        // Health bar
-        if (tower.health < 200) {
-            const healthPercent = tower.health / 200;
-            ctx.fillStyle = '#2c3e50';
-            ctx.fillRect(tower.x - 15, tower.y - 25, 30, 4);
-            ctx.fillStyle = healthPercent > 0.3 ? '#27ae60' : '#e74c3c';
-            ctx.fillRect(tower.x - 15, tower.y - 25, 30 * healthPercent, 4);
+function renderTerrain() {
+    for (let y = 0; y < MAP_HEIGHT; y++) {
+        for (let x = 0; x < MAP_WIDTH; x++) {
+            const terrain = map.terrain[y][x];
+            let color;
+            
+            switch (terrain) {
+                case TERRAIN.WATER:
+                    color = '#4a90e2';
+                    break;
+                case TERRAIN.SAND:
+                    color = '#d4a574';
+                    break;
+                case TERRAIN.RIVER:
+                    color = '#3a7ac2';
+                    break;
+                case TERRAIN.GRASS:
+                    color = ((x + y) % 2 === 0) ? '#5a8f4a' : '#4a7f3a';
+                    break;
+            }
+            
+            ctx.fillStyle = color;
+            ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
         }
-    } else {
-        // Draw attacking tower
-        ctx.fillStyle = tower.color;
-        ctx.beginPath();
-        ctx.arc(tower.x, tower.y, 12, 0, Math.PI * 2);
-        ctx.fill();
+    }
+}
 
-        ctx.strokeStyle = '#ecf0f1';
+function renderWalls() {
+    map.walls.forEach(wall => {
+        const healthPercent = wall.health / 100;
+        ctx.fillStyle = healthPercent > 0.5 ? '#8b7355' : '#6b5d4f';
+        ctx.fillRect(wall.x * TILE_SIZE, wall.y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+        
+        ctx.strokeStyle = '#4a4035';
         ctx.lineWidth = 2;
-        ctx.stroke();
+        ctx.strokeRect(wall.x * TILE_SIZE, wall.y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+    });
+}
 
-        // Range indicator when selected
-        if (game.selectedTower === tower.type) {
-            ctx.strokeStyle = 'rgba(241, 196, 15, 0.2)';
-            ctx.lineWidth = 1;
+function renderCastles() {
+    map.castles.forEach((castle, i) => {
+        const x = castle.x * TILE_SIZE;
+        const y = castle.y * TILE_SIZE;
+        const size = TILE_SIZE * 2;
+        
+        // Highlight if hovered in selection phase
+        if (gameState.phase === PHASE.SELECT_HOME && gameState.hoveredCastle === i) {
+            ctx.fillStyle = 'rgba(255, 255, 0, 0.3)';
+            ctx.fillRect(x - size/2, y - size/2, size, size);
+        }
+        
+        // Castle color
+        ctx.fillStyle = castle.isHome ? '#5a7fa0' : '#7f7f7f';
+        ctx.fillRect(x - TILE_SIZE/2, y - TILE_SIZE/2, TILE_SIZE, TILE_SIZE * 1.5);
+        
+        // Tower
+        ctx.fillStyle = castle.isHome ? '#4a6f90' : '#6f6f6f';
+        ctx.fillRect(x - TILE_SIZE/3, y - TILE_SIZE, TILE_SIZE * 0.66, TILE_SIZE);
+        
+        // Flag
+        if (castle.isHome) {
+            ctx.strokeStyle = '#ffd700';
+            ctx.lineWidth = 2;
             ctx.beginPath();
-            ctx.arc(tower.x, tower.y, tower.range, 0, Math.PI * 2);
+            ctx.moveTo(x, y - TILE_SIZE * 1.5);
+            ctx.lineTo(x, y - TILE_SIZE * 2);
+            ctx.stroke();
+            
+            ctx.fillStyle = '#d4170a';
+            ctx.beginPath();
+            ctx.moveTo(x, y - TILE_SIZE * 2);
+            ctx.lineTo(x + 8, y - TILE_SIZE * 1.8);
+            ctx.lineTo(x, y - TILE_SIZE * 1.6);
+            ctx.fill();
+        }
+    });
+}
+
+function renderCannons() {
+    map.cannons.forEach((cannon, i) => {
+        const x = cannon.x * TILE_SIZE + TILE_SIZE / 2;
+        const y = cannon.y * TILE_SIZE + TILE_SIZE / 2;
+        
+        // Cannon base
+        ctx.fillStyle = '#4a4035';
+        ctx.beginPath();
+        ctx.arc(x, y, 6, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Cannon barrel (points to angle in combat mode)
+        const angle = (gameState.phase === PHASE.COMBAT && i === gameState.activeCannon) 
+            ? gameState.cannonAngle * Math.PI / 180 
+            : -Math.PI / 2;
+        
+        ctx.strokeStyle = '#2a2025';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + Math.cos(angle) * 10, y + Math.sin(angle) * 10);
+        ctx.stroke();
+        
+        // Highlight active cannon
+        if (gameState.phase === PHASE.COMBAT && i === gameState.activeCannon) {
+            ctx.strokeStyle = '#ffd700';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(x, y, 10, 0, Math.PI * 2);
             ctx.stroke();
         }
+    });
+}
 
-        // Draw weapon indicator
-        ctx.fillStyle = '#2c3e50';
-        if (tower.target) {
-            const angle = Math.atan2(tower.target.y - tower.y, tower.target.x - tower.x);
-            ctx.save();
-            ctx.translate(tower.x, tower.y);
-            ctx.rotate(angle);
-            ctx.fillRect(8, -2, 8, 4);
-            ctx.restore();
-        } else {
-            ctx.fillRect(tower.x + 8, tower.y - 2, 8, 4);
+function renderShips() {
+    map.ships.forEach(ship => {
+        const bob = Math.sin(ship.bobOffset) * 2;
+        const x = ship.x;
+        const y = ship.y + bob;
+        
+        // Ship hull
+        ctx.fillStyle = '#8b4513';
+        ctx.fillRect(x - 15, y, 30, 20);
+        
+        // Sail
+        ctx.fillStyle = '#f0e68c';
+        ctx.beginPath();
+        ctx.moveTo(x, y - 5);
+        ctx.lineTo(x + 15, y + 5);
+        ctx.lineTo(x, y + 15);
+        ctx.fill();
+        
+        // Health bar
+        const healthPercent = ship.health / ship.maxHealth;
+        ctx.fillStyle = '#333';
+        ctx.fillRect(x - 15, y - 10, 30, 4);
+        ctx.fillStyle = healthPercent > 0.5 ? '#0f0' : healthPercent > 0.25 ? '#ff0' : '#f00';
+        ctx.fillRect(x - 15, y - 10, 30 * healthPercent, 4);
+    });
+}
+
+function renderCannonballs() {
+    map.cannonballs.forEach(ball => {
+        ctx.fillStyle = ball.owner === 'player' ? '#2a2025' : '#4a2015';
+        ctx.beginPath();
+        ctx.arc(ball.x, ball.y, 4, 0, Math.PI * 2);
+        ctx.fill();
+    });
+}
+
+function renderExplosions() {
+    map.explosions.forEach(exp => {
+        const alpha = exp.life / 0.3;
+        ctx.fillStyle = `rgba(255, 100, 0, ${alpha * 0.5})`;
+        ctx.beginPath();
+        ctx.arc(exp.x, exp.y, exp.radius, 0, Math.PI * 2);
+        ctx.fill();
+        
+        ctx.strokeStyle = `rgba(255, 200, 0, ${alpha})`;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+    });
+}
+
+function renderParticles() {
+    map.particles.forEach(p => {
+        ctx.fillStyle = p.color;
+        ctx.fillRect(p.x, p.y, 3, 3);
+    });
+}
+
+function renderWallPiecePreview() {
+    const piece = getRotatedPiece(WALL_PIECES[gameState.wallPieceIndex], gameState.wallPieceRotation);
+    const canPlace = canPlaceWallPiece(piece, gameState.wallPieceX, gameState.wallPieceY);
+    
+    ctx.fillStyle = canPlace ? 'rgba(139, 115, 85, 0.6)' : 'rgba(220, 20, 20, 0.6)';
+    
+    for (let py = 0; py < piece.length; py++) {
+        for (let px = 0; px < piece[py].length; px++) {
+            if (piece[py][px]) {
+                const x = (gameState.wallPieceX + px) * TILE_SIZE;
+                const y = (gameState.wallPieceY + py) * TILE_SIZE;
+                ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+                ctx.strokeStyle = '#4a4035';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(x, y, TILE_SIZE, TILE_SIZE);
+            }
         }
     }
-
-    ctx.restore();
 }
 
-function drawEnemy(enemy) {
-    // Enemy body
-    ctx.fillStyle = enemy.color;
-    ctx.beginPath();
-    ctx.arc(enemy.x, enemy.y, enemy.size / 2, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Enemy outline
-    ctx.strokeStyle = '#2c3e50';
+function renderCannonAim() {
+    if (map.cannons.length === 0 || gameState.activeCannon >= map.cannons.length) return;
+    
+    const cannon = map.cannons[gameState.activeCannon];
+    const x = cannon.x * TILE_SIZE + TILE_SIZE / 2;
+    const y = cannon.y * TILE_SIZE + TILE_SIZE / 2;
+    const angle = gameState.cannonAngle * Math.PI / 180;
+    const length = 100;
+    
+    // Aiming line
+    ctx.strokeStyle = 'rgba(255, 215, 0, 0.5)';
     ctx.lineWidth = 2;
+    ctx.setLineDash([5, 5]);
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + Math.cos(angle) * length, y + Math.sin(angle) * length);
     ctx.stroke();
-
-    // Health bar
-    const healthPercent = enemy.health / enemy.maxHealth;
-    ctx.fillStyle = '#2c3e50';
-    ctx.fillRect(enemy.x - 15, enemy.y - enemy.size / 2 - 8, 30, 4);
-    ctx.fillStyle = healthPercent > 0.5 ? '#27ae60' : healthPercent > 0.25 ? '#f39c12' : '#e74c3c';
-    ctx.fillRect(enemy.x - 15, enemy.y - enemy.size / 2 - 8, 30 * healthPercent, 4);
+    ctx.setLineDash([]);
 }
 
-function drawProjectile(proj) {
-    ctx.fillStyle = proj.color;
-    ctx.beginPath();
-    ctx.arc(proj.x, proj.y, proj.aoe ? 6 : 4, 0, Math.PI * 2);
-    ctx.fill();
-
-    if (proj.aoe) {
-        ctx.strokeStyle = proj.color;
-        ctx.lineWidth = 1;
-        ctx.stroke();
-    }
-}
-
-function drawTowerPreview(x, y) {
-    const tower = TOWER_TYPES[game.selectedTower];
-
-    // Range
-    ctx.strokeStyle = 'rgba(46, 204, 113, 0.3)';
-    ctx.lineWidth = 2;
-    if (tower.range) {
-        ctx.beginPath();
-        ctx.arc(x, y, tower.range, 0, Math.PI * 2);
-        ctx.stroke();
-    }
-
-    // Tower preview
-    ctx.globalAlpha = 0.6;
-    if (tower.isWall) {
-        ctx.fillStyle = tower.color;
-        ctx.fillRect(x - 15, y - 15, 30, 30);
+function renderHUD() {
+    const padding = 10;
+    const fontSize = 14;
+    
+    // HUD background
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    ctx.fillRect(0, 0, CANVAS_WIDTH, 40);
+    ctx.fillRect(0, CANVAS_HEIGHT - 40, CANVAS_WIDTH, 40);
+    
+    ctx.fillStyle = '#ffd700';
+    ctx.font = `${fontSize}px Courier New`;
+    ctx.textAlign = 'left';
+    
+    // Top HUD
+    ctx.fillText(`LEVEL ${gameState.level}-${gameState.round}`, padding, 25);
+    
+    const phaseName = {
+        SELECT_HOME: 'CHOOSE HOME CASTLE',
+        PLACE_CANNONS: 'PLACE CANNONS',
+        COMBAT: 'BATTLE',
+        BUILDING: 'REBUILD WALLS'
+    }[gameState.phase] || '';
+    
+    ctx.textAlign = 'center';
+    ctx.fillText(phaseName, CANVAS_WIDTH / 2, 25);
+    
+    ctx.textAlign = 'right';
+    const timer = Math.ceil(gameState.phaseTimer);
+    ctx.fillText(`TIME: ${timer}s`, CANVAS_WIDTH - padding, 25);
+    
+    // Bottom HUD
+    ctx.textAlign = 'left';
+    ctx.fillText(`SCORE: ${gameState.score}`, padding, CANVAS_HEIGHT - 15);
+    
+    const enclosedCount = map.castles.filter(c => c.owner === 'player' && c.enclosed).length;
+    ctx.textAlign = 'center';
+    ctx.fillText(`CASTLES: ${enclosedCount}`, CANVAS_WIDTH / 2, CANVAS_HEIGHT - 15);
+    
+    ctx.textAlign = 'right';
+    if (gameState.phase === PHASE.PLACE_CANNONS) {
+        ctx.fillText(`CANNONS: ${gameState.cannonsToPlace}`, CANVAS_WIDTH - padding, CANVAS_HEIGHT - 15);
     } else {
-        ctx.fillStyle = tower.color;
+        ctx.fillText(`CANNONS: ${map.cannons.length}`, CANVAS_WIDTH - padding, CANVAS_HEIGHT - 15);
+    }
+}
+
+function renderTitleScreen() {
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    
+    ctx.fillStyle = '#ffd700';
+    ctx.font = 'bold 48px Courier New';
+    ctx.textAlign = 'center';
+    ctx.fillText('BULWARK 1475', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 - 50);
+    
+    ctx.fillStyle = '#c9a961';
+    ctx.font = '20px Courier New';
+    ctx.fillText('Castle Defense', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
+    
+    ctx.fillStyle = '#8b7355';
+    ctx.font = '16px Courier New';
+    ctx.fillText('Click PLAY NOW to start', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 50);
+}
+
+function renderGameOverScreen() {
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    
+    ctx.fillStyle = '#d4170a';
+    ctx.font = 'bold 48px Courier New';
+    ctx.textAlign = 'center';
+    ctx.fillText('CASTLE FALLEN', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 - 50);
+    
+    ctx.fillStyle = '#c9a961';
+    ctx.font = '24px Courier New';
+    ctx.fillText(`Level ${gameState.level} - Round ${gameState.round}`, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
+    ctx.fillText(`Final Score: ${gameState.score}`, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 40);
+    
+    ctx.fillStyle = '#8b7355';
+    ctx.font = '16px Courier New';
+    ctx.fillText('Click PLAY NOW to try again', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 100);
+}
+
+function renderVictoryScreen() {
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.9)';
+    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    
+    ctx.fillStyle = '#ffd700';
+    ctx.font = 'bold 48px Courier New';
+    ctx.textAlign = 'center';
+    ctx.fillText('VICTORY!', CANVAS_WIDTH / 2, 80);
+    
+    ctx.fillStyle = '#c9a961';
+    ctx.font = '20px Courier New';
+    ctx.fillText(`Final Score: ${gameState.score}`, CANVAS_WIDTH / 2, 130);
+    
+    // Walk the plank animation
+    ctx.fillText('The enemy commander walks the plank...', CANVAS_WIDTH / 2, 180);
+    
+    const plankX = CANVAS_WIDTH / 2;
+    const plankY = 250;
+    const plankLength = 150;
+    
+    // Ship
+    ctx.fillStyle = '#8b4513';
+    ctx.fillRect(plankX - 100, plankY, 100, 60);
+    
+    // Plank
+    ctx.fillStyle = '#d4a574';
+    ctx.fillRect(plankX, plankY + 20, plankLength, 10);
+    
+    // Commander walking
+    const commanderProgress = Math.min(plankLength - 20, gameState.plankProgress);
+    const commanderY = commanderProgress > plankLength - 30 ? plankY + 30 + (gameState.plankProgress - (plankLength - 30)) * 2 : plankY + 10;
+    
+    // Simple commander sprite
+    ctx.fillStyle = '#ff0000';
+    ctx.fillRect(plankX + commanderProgress, commanderY, 15, 20);
+    ctx.fillStyle = '#ffccaa';
+    ctx.fillRect(plankX + commanderProgress + 3, commanderY - 8, 9, 9);
+    
+    // Water
+    ctx.fillStyle = '#4a90e2';
+    ctx.fillRect(0, plankY + 80, CANVAS_WIDTH, CANVAS_HEIGHT - plankY - 80);
+    
+    // Splash if fallen
+    if (commanderProgress >= plankLength - 20 && commanderY > plankY + 50) {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+        const splashSize = (gameState.plankProgress - (plankLength - 20)) * 3;
         ctx.beginPath();
-        ctx.arc(x, y, 12, 0, Math.PI * 2);
+        ctx.arc(plankX + commanderProgress + 7, plankY + 80, splashSize, 0, Math.PI * 2);
         ctx.fill();
     }
-    ctx.globalAlpha = 1;
 }
 
-function drawParticle(p) {
-    ctx.fillStyle = p.color;
-    ctx.globalAlpha = p.life / 1000;
-    ctx.fillRect(p.x, p.y, p.size, p.size);
-    ctx.globalAlpha = 1;
+function renderSplashScreen() {
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    
+    const phaseName = {
+        SELECT_HOME: 'CHOOSE YOUR HOME CASTLE',
+        PLACE_CANNONS: 'PLACE YOUR CANNONS',
+        COMBAT: 'GET READY FOR BATTLE!',
+        BUILDING: 'REBUILD YOUR WALLS'
+    }[gameState.nextPhaseName] || '';
+    
+    ctx.fillStyle = '#ffd700';
+    ctx.font = 'bold 36px Courier New';
+    ctx.textAlign = 'center';
+    ctx.fillText(phaseName, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
 }
 
-// ===== EFFECTS =====
-function createParticles(x, y, color) {
-    for (let i = 0; i < 8; i++) {
-        game.particles.push({
-            x,
-            y,
-            vx: (Math.random() - 0.5) * 4,
-            vy: (Math.random() - 0.5) * 4 - 2,
-            life: 500 + Math.random() * 500,
-            color,
-            size: 3 + Math.random() * 3
-        });
-    }
-}
-
-function createExplosion(x, y, radius) {
-    for (let i = 0; i < 12; i++) {
-        const angle = (Math.PI * 2 * i) / 12;
-        game.particles.push({
-            x,
-            y,
-            vx: Math.cos(angle) * 3,
-            vy: Math.sin(angle) * 3,
-            life: 300,
-            color: '#e74c3c',
-            size: 4
-        });
-    }
-}
-
-// ===== SOUND =====
+// ===== AUDIO =====
 const audioContext = new (window.AudioContext || window.webkitAudioContext)();
 
 function playSound(type) {
     const oscillator = audioContext.createOscillator();
     const gainNode = audioContext.createGain();
-
     oscillator.connect(gainNode);
     gainNode.connect(audioContext.destination);
-
+    
     const now = audioContext.currentTime;
-
-    switch(type) {
-        case 'shoot':
-            oscillator.frequency.value = 400;
+    
+    switch (type) {
+        case 'cannon':
+            oscillator.frequency.value = 80;
+            gainNode.gain.setValueAtTime(0.3, now);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+            oscillator.start(now);
+            oscillator.stop(now + 0.3);
+            break;
+            
+        case 'explosion':
+            oscillator.frequency.value = 120;
+            gainNode.gain.setValueAtTime(0.2, now);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+            oscillator.start(now);
+            oscillator.stop(now + 0.2);
+            break;
+            
+        case 'place':
+            oscillator.frequency.value = 600;
             gainNode.gain.setValueAtTime(0.1, now);
             gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
             oscillator.start(now);
             oscillator.stop(now + 0.1);
             break;
-        case 'kill':
-            oscillator.frequency.value = 200;
-            gainNode.gain.setValueAtTime(0.15, now);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
-            oscillator.start(now);
-            oscillator.stop(now + 0.2);
-            break;
-        case 'damage':
-            oscillator.frequency.value = 100;
-            gainNode.gain.setValueAtTime(0.2, now);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
-            oscillator.start(now);
-            oscillator.stop(now + 0.3);
-            break;
-        case 'place':
-            oscillator.frequency.value = 600;
-            gainNode.gain.setValueAtTime(0.1, now);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
-            oscillator.start(now);
-            oscillator.stop(now + 0.15);
-            break;
     }
 }
 
-// ===== HUD UPDATE =====
-function updateHUD() {
-    const goldEl = document.getElementById('gold');
-    const waveEl = document.getElementById('wave');
-    const livesEl = document.getElementById('lives');
-    const scoreEl = document.getElementById('score');
-
-    if (goldEl) goldEl.textContent = game.gold;
-    if (waveEl) waveEl.textContent = game.wave;
-    if (scoreEl) scoreEl.textContent = game.score;
-    if (livesEl) {
-        livesEl.textContent = '❤️'.repeat(Math.max(0, game.lives));
-    }
-
-    updateTowerSelection();
-}
-
-// ===== GAME FLOW =====
-function startGame() {
-    game.state = 'playing';
-    game.gold = 200;
-    game.lives = 5;
-    game.wave = 0;
-    game.score = 0;
-    game.enemiesDefeated = 0;
-    game.selectedTower = null;
-    game.towers = [];
-    game.enemies = [];
-    game.projectiles = [];
-    game.particles = [];
-    game.waveActive = false;
-    game.enemiesInWave = 0;
-    game.enemiesSpawned = 0;
-
-    showScreen('game-screen');
-    updateHUD();
-
-    const btn = document.getElementById('next-wave-btn');
-    if (btn) btn.disabled = false;
-}
-
-function gameOver() {
-    game.state = 'gameOver';
-
-    const finalScore = document.getElementById('final-score');
-    const finalWave = document.getElementById('final-wave');
-    const enemiesDefeated = document.getElementById('enemies-defeated');
-
-    if (finalScore) finalScore.textContent = game.score;
-    if (finalWave) finalWave.textContent = game.wave;
-    if (enemiesDefeated) enemiesDefeated.textContent = game.enemiesDefeated;
-
-    showScreen('game-over-screen');
-}
-
-// ===== INITIALIZATION =====
-function init() {
-    initUI();
-    if (ctx) {
-        requestAnimationFrame(gameLoop);
-    }
-}
-
-// Start the game when DOM is loaded
+// ===== START GAME =====
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
 } else {
