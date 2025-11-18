@@ -1,0 +1,30 @@
+# Git files
+.git
+.gitignore
+
+# Documentation (keep in image if you want)
+# README.md
+# DEPLOYMENT.md
+
+# Docker files
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# IDE and editor files
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Development files
+node_modules
+npm-debug.log

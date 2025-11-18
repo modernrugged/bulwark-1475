@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Bulwark 1475 - A retro SNES-style castle defense game">
+    <title>Bulwark 1475 - Castle Defense</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Courier New', monospace;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #eee;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        .container {
+            text-align: center;
+            padding: 2rem;
+            max-width: 800px;
+        }
+
+        h1 {
+            font-size: 3rem;
+            color: #f39c12;
+            text-shadow: 4px 4px 0px #c0392b;
+            margin-bottom: 1rem;
+            letter-spacing: 2px;
+        }
+
+        .subtitle {
+            font-size: 1.2rem;
+            color: #95a5a6;
+            margin-bottom: 2rem;
+        }
+
+        .game-placeholder {
+            width: 640px;
+            height: 480px;
+            margin: 2rem auto;
+            background: #2c3e50;
+            border: 4px solid #34495e;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+
+        .placeholder-text {
+            font-size: 1.5rem;
+            color: #7f8c8d;
+            text-align: center;
+            padding: 2rem;
+        }
+
+        .info {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 1.5rem;
+            border-radius: 8px;
+            margin-top: 2rem;
+            border: 2px solid #34495e;
+        }
+
+        .info p {
+            margin: 0.5rem 0;
+            line-height: 1.6;
+        }
+
+        .link {
+            color: #3498db;
+            text-decoration: none;
+            transition: color 0.3s;
+        }
+
+        .link:hover {
+            color: #2980b9;
+            text-decoration: underline;
+        }
+
+        .castle {
+            font-size: 4rem;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🏰 BULWARK 1475 🏰</h1>
+        <p class="subtitle">SNES-Style Castle Defense Game</p>
+
+        <div class="game-placeholder">
+            <div class="placeholder-text">
+                <div class="castle">🏰</div>
+                <p>Game Coming Soon!</p>
+                <p style="font-size: 0.9rem; margin-top: 1rem;">
+                    This is a placeholder page. Add your game files to get started.
+                </p>
+            </div>
+        </div>
+
+        <div class="info">
+            <p><strong>Welcome to Bulwark 1475!</strong></p>
+            <p>This repository includes complete deployment documentation.</p>
+            <p>
+                📖 Check out the
+                <a href="https://github.com/modernrugged/bulwark-1475/blob/main/README.md" class="link" target="_blank">README</a>
+                for project info
+            </p>
+            <p>
+                🚀 See
+                <a href="https://github.com/modernrugged/bulwark-1475/blob/main/DEPLOYMENT.md" class="link" target="_blank">DEPLOYMENT.md</a>
+                for deployment instructions
+            </p>
+        </div>
+    </div>
+</body>
+</html>

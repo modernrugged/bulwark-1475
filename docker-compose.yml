@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  bulwark-game:
+    build: .
+    container_name: bulwark-1475
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+    labels:
+      - "com.bulwark.description=Bulwark 1475 SNES-style castle defense game"
+    # Optional: Add volume for development
+    # volumes:
+    #   - ./:/usr/share/nginx/html/:ro
